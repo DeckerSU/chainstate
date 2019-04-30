@@ -54,6 +54,7 @@ int main(int argc, char **argv)
         { "zcash",                  { 0x1c, 0xb8 }, 2, { 0x1c, 0xbd }, 2 }, // t1 & t3
         { "zcash-testnet",          { 0x1d, 0x25 }, 2, { 0x1c, 0xba }, 2 }, // tm & t2
         { "bitcoinz",               { 0x1c, 0xb8 }, 2, { 0x1c, 0xbd }, 2 },
+        { "hempcoin",               { 66 }, 1, { 38 }, 1 },
         { NULL, {}, 0 , {}, 0 }
     };
 
@@ -142,14 +143,19 @@ int main(int argc, char **argv)
             uint64_t version = get_next_varint(value);
             uint64_t code = get_next_varint(value);
 
+            /* Note - for Hempcoin we added fCoinStake to the 2nd bit. Keep in mind when reading the following and adjust as needed. */
+
             bool isCoinbase = code & 0x01;
-            bool isVout0NotSpent = code & 0x02;
-            bool isVout1NotSpent = code & 0x04;
+            bool isCoinstake = (code & 2) != 0;
+
+            bool isVout0NotSpent = code & 0x04;
+            bool isVout1NotSpent = code & 0x08;
 
             bool has_error = false;
-
-            uint64_t unspentnessbytes = code >> 4;
-            unsigned int nMaskCode = (code / 8) + ((code & 6) != 0 ? 0 : 1);
+            /* coins.h - Unserialize */
+            uint64_t unspentnessbytes = code >> 4; // (??? 4 or 8) 
+            // unsigned int nMaskCode = (code / 8) + ((code & 6) != 0 ? 0 : 1);
+            unsigned int nMaskCode = (code / 16) + ((code & 12) != 0 ? 0 : 1);
 
             if (!isVout0NotSpent && !isVout1NotSpent) {
                 unspentnessbytes ++;
@@ -163,6 +169,7 @@ int main(int argc, char **argv)
             }
 
             while (nMaskCode > 0) {
+
                 if (value[0] != 0) {
                     nMaskCode --;
                 }
@@ -187,10 +194,10 @@ int main(int argc, char **argv)
                 // special txout type pay-to-pubkey-hash
                 type = value[0];
 
-                if (dump) {
+               if (dump) {
                     cout << "Amount: " << amount << " | Type: " << (int)type << endl;
-                    // cout << string_to_hex(value) << endl;
-                }
+                    cout << string_to_hex(value) << endl;
+               }
 
                 switch(type) {
                     case 0x00:
@@ -203,6 +210,9 @@ int main(int argc, char **argv)
                         assert(value.size() >= 20);
                         value = value.substr(1);
                         addr = get_addr(current_prefix.script_prefix, current_prefix.script_prefix_size, value.substr(0, 20));
+                        if (value.size() < 20) {
+                            cout << "[ Decker ] " << string_to_hex(tx) << " " << string_to_hex(value) << " " << value.size() << endl;
+                        }
                         value = value.substr(20);
                         break;
                     case 0x02:
@@ -230,7 +240,10 @@ int main(int argc, char **argv)
                         break;
                 }
 
-                cout << string_to_hex(tx) << ";TBD;" << addr << ";" << amount << endl;
+                if (amount != 0 && type != 128) {
+                    cout << string_to_hex(tx) << ";" << addr << ";" << amount << endl;
+                }
+                
             }
 
             continue;
