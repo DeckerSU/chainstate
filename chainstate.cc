@@ -293,7 +293,7 @@ int main(int argc, char **argv)
                 }
 
                 //if (amount != 0 && type != 128) {
-                    cout << string_to_hex(tx) << ";" << addr << ";" << amount << endl;
+                    cout << string_to_hex(tx) << "," << addr << "," << amount << endl;
                 //}
                 
             }
@@ -412,7 +412,7 @@ int main(int argc, char **argv)
         }
 
         if (addr != string()) {
-            cout << string_to_hex(tx) << ";" << txn << ";" << addr << ";" << amount << endl;
+            cout << string_to_hex(tx) << "," << txn << "," << addr << "," << amount << endl;
         } else {
             cout << string_to_hex(tx) << ";Invalid address or lost;" << amount << endl;
         }
