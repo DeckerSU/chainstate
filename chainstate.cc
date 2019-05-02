@@ -138,6 +138,12 @@ int main(int argc, char **argv)
             tx = idx.substr(1, 32);
             reverse(tx.begin(), tx.end());
 
+            /*
+            if (string_to_hex(tx) == "e85857bc8017e4f164b5a4fa41c72849b27a2f1d62fd9474daa0cfca66210000") {
+                cerr << "[ Decker ] " << string_to_hex(value) << endl;
+            }
+            */
+
             string orig_value = value;
 
             uint64_t version = get_next_varint(value);
@@ -153,9 +159,11 @@ int main(int argc, char **argv)
 
             bool has_error = false;
             /* coins.h - Unserialize */
-            uint64_t unspentnessbytes = code >> 4; // (??? 4 or 8) 
+            uint64_t unspentnessbytes = code >> 4; // should be code >> 3 in original BTC
             // unsigned int nMaskCode = (code / 8) + ((code & 6) != 0 ? 0 : 1);
             unsigned int nMaskCode = (code / 16) + ((code & 12) != 0 ? 0 : 1);
+            unsigned int nMaskCodeReal = nMaskCode;
+            unsigned int nMaskCodeCount = nMaskCode;
 
             if (!isVout0NotSpent && !isVout1NotSpent) {
                 unspentnessbytes ++;
@@ -179,6 +187,7 @@ int main(int argc, char **argv)
 
             while(value.size() > 21 && false == has_error) {
                 unsigned char type;
+                
                 // read vout (compact amount representation / special txout type / address uint160)
 
                 if (dump) {
@@ -191,6 +200,7 @@ int main(int argc, char **argv)
                     break;
                 }
 
+                switch_label:
                 // special txout type pay-to-pubkey-hash
                 type = value[0];
 
@@ -198,6 +208,17 @@ int main(int argc, char **argv)
                     cout << "Amount: " << amount << " | Type: " << (int)type << endl;
                     cout << string_to_hex(value) << endl;
                }
+                // string pub_str;
+
+                /*
+                00  = P2PKH <- upcoming data is the hash160 public key
+                01  = P2SH  <- upcoming data is the hash160 of a script
+                02  = P2PK  <- upcoming data is a compressed public key (nsize makes up part of the public key) [y=even]
+                03  = P2PK  <- upcoming data is a compressed public key (nsize makes up part of the public key) [y=odd]
+                04  = P2PK  <- upcoming data is an uncompressed public key (but has been compressed for leveldb) [y=even]
+                05  = P2PK  <- upcoming data is an uncompressed public key (but has been compressed for leveldb) [y=odd]
+                06+ =       <- indicates size of upcoming full script (subtract 6 to get the actual size in bytes)
+                */
 
                 switch(type) {
                     case 0x00:
@@ -205,21 +226,26 @@ int main(int argc, char **argv)
                         value = value.substr(1);
                         addr = get_addr(current_prefix.pubkey_prefix, current_prefix.pubkey_prefix_size, value.substr(0, 20));
                         value = value.substr(20);
+                        nMaskCodeCount--;
                         break;
                     case 0x01:
                         assert(value.size() >= 20);
                         value = value.substr(1);
                         addr = get_addr(current_prefix.script_prefix, current_prefix.script_prefix_size, value.substr(0, 20));
+                        /*
                         if (value.size() < 20) {
                             cout << "[ Decker ] " << string_to_hex(tx) << " " << string_to_hex(value) << " " << value.size() << endl;
                         }
+                        */
                         value = value.substr(20);
+                        nMaskCodeCount--;
                         break;
                     case 0x02:
                     case 0x03:
                         assert(value.size() >= 33);
                         addr = get_addr(current_prefix.pubkey_prefix, current_prefix.pubkey_prefix_size, str_to_ripesha(value, 33));
                         value = value.substr(33);
+                        nMaskCodeCount--;
                         break;
                     case 0x04:
                     case 0x05:
@@ -234,15 +260,41 @@ int main(int argc, char **argv)
                         addr = get_addr(current_prefix.pubkey_prefix, current_prefix.pubkey_prefix_size, str_to_ripesha(string((const char*)pub, PUBLIC_KEY_SIZE)));
                         value = value.substr(33);
                         break;
+                    case 0x06:
+                        /*
+                        cerr << "[ Decker ] Type: " << (int)(type)<< " Size:" << value.size() << endl;
+                        cerr << "TX: " << string_to_hex(tx) << " | Version: " << (int)version << endl;
+                        cerr << "coinbase: " << isCoinbase << " / " <<  isVout0NotSpent << "|" << isVout1NotSpent << " / N=" << (int)unspentnessbytes << endl;
+                        cerr << "coinstake: " << isCoinstake << endl;
+                        cerr << "nMaskCodeReal / nMaskCodeCount: " << (int)nMaskCodeReal << " / " << (int)nMaskCodeCount << endl;
+
+                        cerr << "orig value: " << string_to_hex(orig_value) << endl;
+                        cerr << "     value: " << string_to_hex(value) << endl;
+                        */
+
+                        value = value.substr(1); // delete 0x06
+                        /*
+                        cerr << "     value: " << string_to_hex(value) << endl;
+                        cerr << "    amount[1]: " << amount << endl;
+                        */
+                        amount = decompress_amount(get_next_varint(value));
+                        /*
+                        cerr << "    amount[2]: " << amount << endl;
+                        cerr << "     value: " << string_to_hex(value) << endl;
+                        */
+
+                        goto switch_label;
+                        break;
+
                     default:
                         cerr << "ERROR type: " << (int)type << " on TX: " << string_to_hex(tx) << " | Version: " << (int)version << endl;
                         has_error = true;
                         break;
                 }
 
-                if (amount != 0 && type != 128) {
+                //if (amount != 0 && type != 128) {
                     cout << string_to_hex(tx) << ";" << addr << ";" << amount << endl;
-                }
+                //}
                 
             }
 
